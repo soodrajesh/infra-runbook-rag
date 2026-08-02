@@ -23,39 +23,12 @@ rag ask "<question>"            # embed the question, retrieve top-k chunks, ask
   system instruction to answer only from the provided excerpts and cite the section each claim
   came from.
 
-## Setup
+## Setup, usage, tests
 
-```bash
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env   # fill in OPENAI_API_KEY
-export $(cat .env | xargs)
-```
-
-## Usage
-
-```bash
-# first run downloads the local embedding model (~90MB)
-python -m rag.cli ingest ../minikube-gitops-platform --glob "*.md"
-
-python -m rag.cli ask "why would sample-app return a 502 from /greeting?"
-```
-
-## Tests
-
-```bash
-pytest
-```
-
-Chunking and retrieval tests run with synthetic embeddings (no model download, no API key).
-The `ask` tests mock the OpenAI client, so the full suite runs offline in CI.
-
-## Operational notes
-
-See [RUNBOOK.md](RUNBOOK.md) for edge cases found during audit — vendored docs getting pulled
-into a corpus, embedding-dimension mismatches after switching models, unbalanced code fences in
-malformed markdown, and the accuracy ceiling of the current retrieval approach — and how each is
-now handled or worked around.
+See [RUNBOOK.md](RUNBOOK.md) for step-by-step commands: environment setup, ingesting a repo's
+docs, asking questions, running the test suite, and troubleshooting (vendored docs polluting the
+corpus, embedding-dimension mismatches after switching models, malformed markdown, and the
+accuracy ceiling of the current retrieval approach).
 
 ## What's missing
 
