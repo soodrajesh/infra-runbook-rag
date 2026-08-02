@@ -26,8 +26,10 @@ def retrieve(store: Store, question: str, k: int = 6) -> list[ScoredChunk]:
     return store.top_k(query_embedding, k=k)
 
 
-def answer(client, store: Store, question: str, k: int = 6) -> str:
-    chunks = retrieve(store, question, k=k)
+def answer_from_chunks(client, chunks: list[ScoredChunk], question: str) -> str:
+    """Answer using already-retrieved chunks. Use this over answer() when the caller
+    also needs the chunks for its own purposes (e.g. displaying them) — avoids retrieving
+    (and re-embedding the question) twice."""
     if not chunks:
         return "No documents have been ingested yet — run `rag ingest <path>` first."
 
@@ -44,3 +46,8 @@ def answer(client, store: Store, question: str, k: int = 6) -> str:
         ],
     )
     return response.choices[0].message.content or "The model returned no content (this can happen with content filtering)."
+
+
+def answer(client, store: Store, question: str, k: int = 6) -> str:
+    chunks = retrieve(store, question, k=k)
+    return answer_from_chunks(client, chunks, question)

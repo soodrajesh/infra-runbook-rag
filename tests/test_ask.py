@@ -52,6 +52,26 @@ def test_answer_handles_none_content(monkeypatch, populated_store):
     assert "no content" in result.lower()
 
 
+def test_answer_from_chunks_does_not_call_embed(monkeypatch, populated_store):
+    """The UI retrieves chunks itself, then calls answer_from_chunks — it must not
+    re-embed the question or re-query the store, or every Ask click does the work twice."""
+    embed_calls = []
+    monkeypatch.setattr(ask_module, "embed", lambda texts: embed_calls.append(texts) or np.array([[1.0, 0.0]], dtype="float32"))
+
+    chunks = ask_module.retrieve(populated_store, "why 502?", k=1)
+    assert len(embed_calls) == 1
+
+    fake_response = MagicMock()
+    fake_response.choices = [MagicMock(message=MagicMock(content="answer [RUNBOOK.md § Troubleshooting 502s]"))]
+    client = MagicMock()
+    client.chat.completions.create.return_value = fake_response
+
+    result = ask_module.answer_from_chunks(client, chunks, "why 502?")
+
+    assert len(embed_calls) == 1  # answer_from_chunks must not embed again
+    assert "RUNBOOK.md § Troubleshooting 502s" in result
+
+
 def test_answer_handles_empty_store(tmp_path):
     store = Store(tmp_path / "empty.db")
     client = MagicMock()

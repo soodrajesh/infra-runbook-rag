@@ -1,3 +1,4 @@
+import sqlite3
 from pathlib import Path
 
 import numpy as np
@@ -76,6 +77,14 @@ def test_top_k_rejects_query_with_wrong_dim(tmp_path: Path):
         store.top_k(np.array([1.0, 0.0, 0.0], dtype="float32"))
 
     store.close()
+
+
+def test_store_context_manager_closes_connection(tmp_path: Path):
+    with Store(tmp_path / "test.db") as store:
+        store.add([Chunk(source_file="a.md", section="A", text="a")], np.array([[1.0, 0.0]], dtype="float32"))
+
+    with pytest.raises(sqlite3.ProgrammingError):
+        store.conn.execute("SELECT 1")
 
 
 def test_clear_removes_existing_chunks(tmp_path: Path):

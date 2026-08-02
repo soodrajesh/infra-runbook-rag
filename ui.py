@@ -5,7 +5,7 @@ from pathlib import Path
 
 import streamlit as st
 
-from rag.ask import answer, retrieve
+from rag.ask import answer_from_chunks, retrieve
 from rag.chunk import chunk_repo
 from rag.embed import embed
 from rag.store import Store
@@ -42,7 +42,8 @@ with st.sidebar:
                 st.success(f"Stored {len(chunks)} chunks in {DB_PATH}")
 
     if DB_PATH.exists():
-        count = Store(DB_PATH).conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
+        with Store(DB_PATH) as store:
+            count = store.conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
         st.caption(f"Current store: {count} chunks in {DB_PATH}")
     else:
         st.caption("No store yet — ingest a repo first.")
@@ -59,11 +60,10 @@ if st.button("Ask", type="primary"):
     elif not question.strip():
         st.warning("Enter a question first.")
     else:
-        store = Store(DB_PATH)
         with st.spinner("Retrieving and asking..."):
-            chunks = retrieve(store, question, k=k)
-            result = answer(get_openai_client(), store, question, k=k)
-        store.close()
+            with Store(DB_PATH) as store:
+                chunks = retrieve(store, question, k=k)
+            result = answer_from_chunks(get_openai_client(), chunks, question)
 
         st.markdown("### Answer")
         st.write(result)

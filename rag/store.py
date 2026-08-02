@@ -91,3 +91,9 @@ class Store:
 
     def close(self) -> None:
         self.conn.close()
+
+    def __enter__(self) -> Store:
+        return self
+
+    def __exit__(self, *exc_info) -> None:
+        self.close()
