@@ -12,6 +12,53 @@ HEADER_RE = re.compile(r"^(#{1,6})\s+(.*)$")
 # (e.g. a vendored package's README inside .venv/node_modules).
 SKIP_DIRS = {".git", ".venv", "venv", "node_modules", "__pycache__", ".pytest_cache", "dist", "build"}
 
+# Long sections get one embedding vector per section, diluting specific commands buried in
+# prose. Splitting further keeps each vector focused enough for retrieval to find the exact
+# paragraph a question is about.
+MAX_CHUNK_CHARS = 600
+
+
+def _split_long_text(text: str, max_chars: int) -> list[str]:
+    """Split text into paragraph-packed chunks up to max_chars, never splitting a paragraph
+    (or a fenced code block) in half."""
+    paragraphs: list[str] = []
+    current: list[str] = []
+    in_code_block = False
+
+    for line in text.split("\n"):
+        if line.strip().startswith("```"):
+            in_code_block = not in_code_block
+            current.append(line)
+            continue
+        if line.strip() == "" and not in_code_block:
+            if current:
+                paragraphs.append("\n".join(current).strip())
+                current = []
+        else:
+            current.append(line)
+    if current:
+        paragraphs.append("\n".join(current).strip())
+    paragraphs = [p for p in paragraphs if p]
+
+    if not paragraphs:
+        return []
+
+    parts: list[str] = []
+    buf: list[str] = []
+    buf_len = 0
+    for para in paragraphs:
+        added_len = len(para) + (2 if buf else 0)
+        if buf and buf_len + added_len > max_chars:
+            parts.append("\n\n".join(buf))
+            buf, buf_len = [para], len(para)
+        else:
+            buf.append(para)
+            buf_len += added_len
+    if buf:
+        parts.append("\n\n".join(buf))
+
+    return parts
+
 
 @dataclass
 class Chunk:
@@ -36,8 +83,16 @@ def chunk_markdown(path: Path, root: Path) -> list[Chunk]:
 
     def flush() -> None:
         text = "\n".join(buf).strip()
-        if text:
+        if not text:
+            return
+
+        parts = _split_long_text(text, MAX_CHUNK_CHARS)
+        if len(parts) <= 1:
             chunks.append(Chunk(source_file=source_file, section=section, text=text))
+        else:
+            for i, part in enumerate(parts):
+                part_section = f"{section} (part {i + 1}/{len(parts)})"
+                chunks.append(Chunk(source_file=source_file, section=part_section, text=part))
 
     for line in lines:
         if line.strip().startswith("```"):

@@ -40,7 +40,7 @@ def ingest(repo_path: Path, glob: str, db_path: Path):
 @cli.command()
 @click.argument("question")
 @click.option("--db", "db_path", default=DEFAULT_DB, type=click.Path(path_type=Path), show_default=True)
-@click.option("-k", default=4, show_default=True, help="Number of chunks to retrieve.")
+@click.option("-k", default=6, show_default=True, help="Number of chunks to retrieve.")
 def ask(question: str, db_path: Path, k: int):
     """Ask QUESTION against the ingested docs."""
     if not Path(db_path).exists():

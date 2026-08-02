@@ -21,12 +21,12 @@ def format_context(chunks: list[ScoredChunk]) -> str:
     return "\n\n---\n\n".join(parts)
 
 
-def retrieve(store: Store, question: str, k: int = 4) -> list[ScoredChunk]:
+def retrieve(store: Store, question: str, k: int = 6) -> list[ScoredChunk]:
     query_embedding = embed([question])[0]
     return store.top_k(query_embedding, k=k)
 
 
-def answer(client, store: Store, question: str, k: int = 4) -> str:
+def answer(client, store: Store, question: str, k: int = 6) -> str:
     chunks = retrieve(store, question, k=k)
     if not chunks:
         return "No documents have been ingested yet — run `rag ingest <path>` first."

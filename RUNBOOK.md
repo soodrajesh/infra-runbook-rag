@@ -43,12 +43,15 @@ python -m rag.cli ingest ../minikube-gitops-platform --glob "*.md"
 
 First run downloads the local embedding model (`all-MiniLM-L6-v2`, ~90MB) — after that it's
 offline. This walks `<path-to-repo>` for files matching `--glob` (default `*.md`), splits each on
-`##`/`###` headers, embeds every section, and writes them to `rag.db` in the current directory
+`##`/`###` headers, then further splits any section longer than 600 characters into
+paragraph-packed sub-chunks (`section (part i/N)`) so a specific command buried in a long section
+gets its own embedding vector instead of being diluted — see **Troubleshooting → Retrieval
+accuracy** below. Embeds every chunk and writes them to `rag.db` in the current directory
 (override with `--db <path>`). Output looks like:
 
 ```text
-Embedding 24 chunks from ../minikube-gitops-platform ...
-Stored 24 chunks in rag.db
+Embedding 56 chunks from ../minikube-gitops-platform ...
+Stored 56 chunks in rag.db
 ```
 
 Re-running `ingest` against the same or a different repo replaces the store's contents —
@@ -66,12 +69,24 @@ Example:
 python -m rag.cli ask "how do I rotate or reseal the demo secret?"
 ```
 
-Retrieves the top-4 most relevant chunks from `rag.db` (`-k <n>` to change that) and asks
+Retrieves the top-6 most relevant chunks from `rag.db` (`-k <n>` to change that) and asks
 `gpt-4o-mini` to answer using only those excerpts, citing each claim as
 `[source_file § section]`. Needs `OPENAI_API_KEY` set (step 1) and a populated `rag.db`
 (step 2) — both are checked up front with a clear error if missing.
 
-## 4. Run the tests
+## 4. Ask via the UI
+
+```bash
+streamlit run ui.py
+```
+
+Opens a browser tab at `localhost:8501` with the same ingest/ask flow as the CLI, plus an
+expander showing every retrieved chunk with its cosine score and citation — useful for judging
+retrieval quality directly instead of just trusting the final answer. Needs the same
+`OPENAI_API_KEY` as step 1; the sidebar's "Ingest" button does the same work as `rag ingest`
+(step 2) if you haven't populated `rag.db` yet.
+
+## 5. Run the tests
 
 ```bash
 pytest
@@ -123,11 +138,16 @@ so instead of crashing on `None`. If you see this often for legitimate questions
 checking the actual excerpts being sent — usually means the retrieved context is thin or
 off-topic, not a real refusal.
 
-**Retrieval finds a related-but-wrong section** — the known limitation from the README: header
-chunking + a small local embedding model means a question about "rotating the secret" can surface
-a *related* section (like install prerequisites) instead of the exact command
-(`scripts/reseal-demo-secret.sh`). Confirmed live during testing — not a crash, just an accuracy
-ceiling of the v1 retrieval approach. Smaller chunks or a stronger embedding model would help.
+**Retrieval accuracy** — originally, header-only chunking gave a whole long section (e.g.
+README's "How to run this") a single embedding vector, so a specific command buried in it lost
+in cosine ranking to a shorter, more topically-generic section. Confirmed live: asking "how do I
+rotate the secret" surfaced "Prerequisites" instead of the actual `reseal-demo-secret.sh`
+command. Fixed by sub-chunking sections over 600 characters into paragraph-packed pieces
+(`chunk.py`'s `_split_long_text`) plus bumping default `k` from 4 to 6 — re-verified live, the
+same question now surfaces the exact command as the top-scored chunk (0.49 vs. 0.32 before) and
+the generated answer quotes it correctly. Still a local MiniLM embedding with no reranking, so
+this is an improvement, not a guarantee — very short or ambiguously-worded questions can still
+miss.
 
 **`invalid_request_error: credit balance too low`** — the OpenAI key works but the account has no
 billing/credits attached. Fix at

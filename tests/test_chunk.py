@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from rag.chunk import chunk_markdown, chunk_repo
+from rag.chunk import MAX_CHUNK_CHARS, chunk_markdown, chunk_repo
 
 
 def test_chunk_markdown_splits_on_headers(tmp_path: Path):
@@ -76,6 +76,33 @@ def test_chunk_repo_walks_glob(tmp_path: Path):
 
     sources = {c.source_file for c in chunks}
     assert sources == {"README.md", "docs/SECURITY.md"}
+
+
+def test_chunk_markdown_splits_long_sections_into_parts(tmp_path: Path):
+    doc = tmp_path / "README.md"
+    # Each paragraph is short, but there are enough of them to exceed MAX_CHUNK_CHARS,
+    # forcing the section to be split into multiple (part i/N) chunks.
+    paragraphs = [f"Paragraph {i} with some real sentence-length filler text here." for i in range(20)]
+    doc.write_text("## How to run this\n\n" + "\n\n".join(paragraphs))
+
+    chunks = chunk_markdown(doc, tmp_path)
+
+    assert len(chunks) > 1
+    assert all(c.section.startswith("How to run this (part ") for c in chunks)
+    assert all(len(c.text) <= MAX_CHUNK_CHARS for c in chunks)
+    # No paragraph text was dropped in the split.
+    rejoined = " ".join(c.text for c in chunks)
+    for p in paragraphs:
+        assert p in rejoined
+
+
+def test_chunk_markdown_short_section_is_not_split(tmp_path: Path):
+    doc = tmp_path / "README.md"
+    doc.write_text("## Short\nJust one short paragraph.\n")
+
+    chunks = chunk_markdown(doc, tmp_path)
+
+    assert [c.section for c in chunks] == ["Short"]
 
 
 def test_chunk_repo_skips_vendor_dirs(tmp_path: Path):

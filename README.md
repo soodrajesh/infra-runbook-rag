@@ -1,19 +1,21 @@
 # infra-runbook-rag
 
-A small CLI that answers on-call-style questions ("why would this 502", "how do I rotate the
-sealing key") over an infra repo's own markdown docs — README, RUNBOOK, SECURITY — with answers
-cited back to the exact source file and section, not just a filename.
+A small CLI (+ Streamlit UI) that answers on-call-style questions ("why would this 502", "how do
+I rotate the sealing key") over an infra repo's own markdown docs — README, RUNBOOK, SECURITY —
+with answers cited back to the exact source file and section, not just a filename.
 
 ## How it works
 
 ```
 rag ingest <repo-path>          # chunk *.md by header, embed locally, store in SQLite
 rag ask "<question>"            # embed the question, retrieve top-k chunks, ask the LLM
+streamlit run ui.py              # same flow, in a browser, with retrieved-chunk scores visible
 ```
 
-- **Chunking** (`rag/chunk.py`): splits each markdown file on `##`/`###` headers so each chunk
-  keeps its section heading — that's what makes citations like
-  `[RUNBOOK.md § Rotate the sealing key]` possible instead of just `RUNBOOK.md`.
+- **Chunking** (`rag/chunk.py`): splits each markdown file on `##`/`###` headers, then further
+  splits any section over 600 characters into paragraph-packed sub-chunks — that's what makes
+  citations like `[RUNBOOK.md § Rotate the sealing key (part 2/3)]` precise enough for a specific
+  command to win retrieval instead of getting diluted by the rest of a long section.
 - **Embeddings** (`rag/embed.py`): local, via `sentence-transformers` (`all-MiniLM-L6-v2`) — no
   extra API key, runs offline after the first model download.
 - **Storage/retrieval** (`rag/store.py`): SQLite table of `(source_file, section, text,
@@ -37,6 +39,6 @@ Single-repo, CLI-only demo, not a production tool:
 - No incremental ingest — re-running `ingest` truncates and rebuilds the whole store.
 - No live cluster/metrics data, docs only — an obvious next step is folding in a live
   `kubectl`/Prometheus query as an additional retrieval source alongside the docs.
-- No reranking — top-k is pure cosine similarity over a local MiniLM embedding, which is fine at
-  this corpus size but would need a real reranker or a stronger embedding model (e.g. Voyage AI)
-  to scale past a handful of files.
+- No reranking — top-k is pure cosine similarity over a local MiniLM embedding. Paragraph-level
+  sub-chunking (see RUNBOOK) closed the worst case of this, but it's still not a real reranker or
+  a stronger embedding model (e.g. Voyage AI), which would matter more past a handful of files.
